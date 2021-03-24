@@ -43,14 +43,25 @@ bsnip1_cat12vbm_participants.tsv
 # TODO Julie/Benoit: split int participants.tsv, rois and vbm
 # TODO Edouard Add 10 line of age prediction
 
-def OUTPUT_CAT12(dataset, output_path, modality='cat12vbm', mri_preproc='mwp1', scaling=None, harmo=None, type=None, ext=None):
+def OUTPUT_CAT12(dataset, output_path, modality='cat12vbm', mri_preproc='mwp1', scaling=None, ext=None):
+    """
+    Example
+    -------
+    output_path = "/neurospin/tmp/psy_sbox/all_studies/derivatives/arrays"
+    dataset = 'localizer'
+    modality='cat12vbm'
+    mri_preproc='mwp1'
+    scaling='gs'
+    OUTPUT_CAT12(dataset, output_path, mri_preproc='mwp1', scaling="gs", ext='npy')
+    OUTPUT_CAT12(dataset, output_path, mri_preproc='rois', scaling="gs", ext='tsv')
+    OUTPUT_CAT12(dataset, output_path, mri_preproc='participants', ext='tsv')
+    """
     # scaling: global scaling? in "raw", "gs"
     # harmo (harmonization): in [raw, ctrsite, ressite, adjsite]
     # type data64, or data32
     return os.path.join(output_path, dataset + "_" + modality+ "_" + mri_preproc +
-                 ("" if scaling is None else "_" + scaling) +
-                 ("" if harmo is None else "-" + harmo) +
-                 ("" if type is None else "_" + type) + "." + ext)
+                 ("" if scaling is None else "-" + scaling) + "." + ext)
+
 
 
 def OUTPUT_QUASI_RAW(dataset, output_path, modality='cat12vbm', mri_preproc='quasi_raw', type=None, ext=None):
@@ -250,7 +261,7 @@ def quasi_raw_nii2npy(nii_path, phenotype, dataset_name, output_path, qc=None, s
     print("## Save the raw npy file (with shape {})".format(NI_arr.shape))
     np.save(OUTPUT_QUASI_RAW(dataset_name, output_path, type="data64", ext="npy"), NI_arr)
     np.save(OUTPUT_QUASI_RAW(dataset_name, output_path, type="data64", ext="npy"), NI_arr)
-    
+
 
     ######################################################################################################################
     # Deallocate the memory
@@ -258,6 +269,14 @@ def quasi_raw_nii2npy(nii_path, phenotype, dataset_name, output_path, qc=None, s
 
 def cat12_nii2npy(nii_path, phenotype, dataset, output_path, qc=None, sep='\t', id_type=str,
             check = dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5))):
+
+    # Save 3 files:
+    participants_filename = OUTPUT_FILENAME.format(dirname=output, study=STUDY, datatype="participants", ext="csv")
+    rois_filename = OUTPUT_CAT12(dataset, output_path, scaling=None, harmo=None, type="roi", ext="tsv"),
+                              index=False, sep='\t')
+    vbm_filename = OUTPUT_FILENAME.format(dirname=output, study=STUDY, datatype="mwp1%s" % preproc_str, ext="npy")
+
+
     ########################################################################################################################
     # Read phenotypes
 
