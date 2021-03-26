@@ -77,9 +77,9 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
     Parameters
     ----------
     NI_arr:  ndarray, of shape (n_subjects, 1, image_shape).
-    NI_participants_df: DataFrame, with at leas 2 columns: participant_id, "ni_path"
+    NI_participants_df: DataFrame, with at least 2 columns: participant_id, "ni_path"
     participants_df: DataFrame, with 2 at least 1 columns participant_id
-    qc: DataFrame, with at least 1 column participant_id
+    qc: DataFrame, with at 2 columns participant_id and qc in [0, 1].
     participant_id: column that identify participant_id
     id_type: the type of participant_id and session, eventually, that should be used for every DataFrame
 
@@ -90,11 +90,10 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
 
     >>> import numpy as np
     >>> import pandas as pd
-    >>> import brainomics.image_preprocessing as preproc
-    >>> NI_filenames = ['/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-ICAAR017/ses-V1/mri/mwp1sub-ICAAR017_ses-V1_acq-s03_T1w.nii',
-    '/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-ICAAR033/ses-V1/mri/mwp1sub-ICAAR033_ses-V1_acq-s07_T1w.nii',
-    '/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-STARTRA160489/ses-V1/mri/mwp1sub-STARTRA160489_ses-v1_T1w.nii']
-    >>> NI_arr, NI_participants_df, ref_img = preproc.load_images(NI_filenames, check=dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5)))
+    >>> NI_filenames = ['/neurospin/psy/start-icaar-eugei/derivatives/cat12-12.6_vbm/sub-ICAAR017/ses-V1/anat/mri/mwp1sub-ICAAR017_ses-V1_acq-s03_T1w.nii',
+    '/neurospin/psy/start-icaar-eugei/derivatives/cat12-12.6_vbm/sub-ICAAR033/ses-V1/anat/mri/mwp1sub-ICAAR033_ses-V1_acq-s07_T1w.nii',
+    '/neurospin/psy/start-icaar-eugei/derivatives/cat12-12.6_vbm/sub-STARTRA160489/ses-V1/anat/mri/mwp1sub-STARTRA160489_ses-V1_T1w.nii']
+    >>> NI_arr, NI_participants_df, ref_img = load_images(NI_filenames, check=dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5)))
     >>> NI_arr.shape
     (3, 1, 121, 145, 121)
     >>> NI_participants_df
@@ -103,7 +102,7 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
     1       ICAAR033  /neurospin/psy/start-icaar-eugei/derivatives/c...
     2  STARTRA160489  /neurospin/psy/start-icaar-eugei/derivatives/c...
     >>> other_df=pd.DataFrame(dict(participant_id=['ICAAR017', 'STARTRA160489']))
-    >>> NI_arr2, NI_participants_df2 = preproc.merge_ni_df(NI_arr, NI_participants_df, other_df)
+    >>> NI_arr2, NI_participants_df2 = merge_ni_df(NI_arr, NI_participants_df, other_df)
     >>> NI_arr2.shape
     (2, 1, 121, 145, 121)
     >>> NI_participants_df2
@@ -139,6 +138,7 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
     # 2) Keeps only the matching (participant_id, session, run) from both NI_participants_df and participants_df by
     #    preserving the order of NI_participants_df
     # !! Very import to have a clean index (to retrieve the order after the merge)
+    # Create an "index" column
     NI_participants_df = NI_participants_df.reset_index(drop=True).reset_index() # stores a clean index from 0..len(df)
     NI_participants_merged = pd.merge(NI_participants_df, participants_df, on=unique_key_pheno,
                                       how='inner', validate='m:1')
@@ -201,6 +201,7 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
 
     # NI_participants_merged.drop('index')
     return NI_arr[idx_to_keep], NI_participants, NI_rois
+
 
 def quasi_raw_nii2npy(nii_path, phenotype, dataset_name, output_path, qc=None, sep='\t', id_type=str,
             check = dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5))):
@@ -271,31 +272,26 @@ def cat12_nii2npy(nii_path, phenotype, dataset, output_path, qc=None, sep='\t', 
             check = dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5))):
 
     # Save 3 files:
-    participants_filename = OUTPUT_FILENAME.format(dirname=output, study=STUDY, datatype="participants", ext="csv")
-    rois_filename = OUTPUT_CAT12(dataset, output_path, scaling=None, harmo=None, type="roi", ext="tsv"),
-                              index=False, sep='\t')
-    vbm_filename = OUTPUT_FILENAME.format(dirname=output, study=STUDY, datatype="mwp1%s" % preproc_str, ext="npy")
+    participants_filename = OUTPUT_CAT12(dataset, output_path, mri_preproc='participants', ext='tsv')
+    rois_filename = OUTPUT_CAT12(dataset, output_path, mri_preproc='rois', scaling="gs", ext='tsv')
+    vbm_filename = OUTPUT_CAT12(dataset, output_path, mri_preproc='mwp1', scaling="gs", ext='npy')
 
-
-    ########################################################################################################################
-    # Read phenotypes
-
-    qc = pd.read_csv(qc, sep=sep) if qc is not None else None
 
     if 'TIV' in phenotype:
         phenotype.rename(columns={'TIV': 'tiv'}, inplace=True)
 
+    ###########################################################################
+    # Select participants with non missing required keys
+
     keys_required = ['participant_id', 'age', 'sex', 'tiv', 'diagnosis']
 
     assert set(keys_required) <= set(phenotype.columns), \
-        "Missing keys in {} that are required to compute the npy array: {}".format(phenotype_path,
-                                                                                   set(keys_required)-set(phenotype.columns))
+        "Missing keys in phenotype df that are required to compute the npy array: {}".format(
+            set(keys_required)-set(phenotype.columns))
 
     ## TODO: change this condition according to session and run in phenotype.tsv
     #assert len(set(phenotype.participant_id)) == len(phenotype), "Unexpected number of participant_id"
-
-
-    null_or_nan_mask = [False for _ in range(len(phenotype))]
+    null_or_nan_mask = np.zeros(len(phenotype)).astype(bool)
     for key in keys_required:
         null_or_nan_mask |= getattr(phenotype, key).isnull() | getattr(phenotype, key).isna()
     if null_or_nan_mask.sum() > 0:
@@ -304,92 +300,40 @@ def cat12_nii2npy(nii_path, phenotype, dataset, output_path, qc=None, sep='\t', 
 
     participants_df = phenotype[~null_or_nan_mask]
 
-    ########################################################################################################################
-    #  Neuroimaging niftii and TIV
-    #  mwp1 files
-      #  excpected image dimensions
-    NI_filenames = glob.glob(nii_path)
-    ########################################################################################################################
-    #  Load images, intersect with pop and do preprocessing and dump 5d npy
-    print("###########################################################################################################")
-    print("#", dataset)
+    ###########################################################################
+    #  Read nii files
 
-    print("# 1) Read images")
-    scaling, harmo = 'raw', 'raw'
-    print("## Load images")
-    # MODIF 1:
-    #NI_arr, NI_participants_df, ref_img = preproc.load_images(NI_filenames,check=check)
-    NI_arr, NI_participants_df, ref_img = img_to_array(NI_filenames)
-    # assert np.all(NI_arr == imgs_arr)
+    NI_filenames = glob.glob(nii_path)
+    NI_arr, NI_participants_df, ref_img = img_to_array(NI_filenames, expected=check)
     print('--> {} img loaded'.format(len(NI_participants_df)))
 
-    #imgs_df.participant_id.equals(NI_participants_df.participant_id)
+    ###########################################################################
+    # Merge nii's participant_id with participants.tsv
 
-    print("## Merge nii's participant_id with participants.tsv")
-    # MODIF 2:
-    # NI_arr_, NI_participants_df_ = preproc.merge_ni_df(NI_arr, NI_participants_df, participants_df,
-    #                                                     qc=qc, id_type=id_type)
     NI_arr, NI_participants_df, Ni_rois_df = merge_ni_df(NI_arr, NI_participants_df, participants_df,
                                                          qc=qc, id_type=id_type)
-
     print('--> Remaining samples: {} / {}'.format(len(NI_participants_df), len(participants_df)))
     print('--> Remaining samples: {} / {}'.format(len(Ni_rois_df), len(participants_df)))
+    assert NI_arr.shape[0] == NI_participants_df.shape[0] == Ni_rois_df.shape[0], "Unexpected nb of participants"
 
-    print("## Save the new participants.tsv")
-    NI_participants_df.to_csv(OUTPUT_CAT12(dataset, output_path, scaling=None, harmo=None, type="participants", ext="tsv"),
-                              index=False, sep=sep)
-    Ni_rois_df.to_csv(OUTPUT_CAT12(dataset, output_path, scaling=None, harmo=None, type="roi", ext="tsv"),
-                              index=False, sep=sep)
-    print("## Save the raw npy file (with shape {})".format(NI_arr.shape))
-    np.save(OUTPUT_CAT12(dataset, output_path, scaling=scaling, harmo=harmo, type="data64", ext="npy"), NI_arr)
-    NI_arr = np.load(OUTPUT_CAT12(dataset, output_path, scaling=scaling, harmo=harmo, type="data64", ext="npy"), mmap_mode='r')
+    ###########################################################################
+    print("# 3) Global scaling of arrays and ROIs to adjust for TIV ")
+    assert np.all(Ni_rois_df.tiv == NI_participants_df.tiv),"rois.tiv !=  participants.tiv"
 
-    # print("## Compute brain mask")
-    # mask_img = preproc.compute_brain_mask(NI_arr, ref_img, mask_thres_mean=0.1, mask_thres_std=1e-6,
-    #                                      clust_size_thres=10,
-    #                                      verbose=1)
-    # mask_arr = mask_img.get_data() > 0
-    # print("## Save the mask")
-    # mask_img.to_filename(OUTPUT_CAT12(dataset_name, output_path, scaling=None, harmo=None, type="mask", ext="nii.gz"))
+    NI_arr = global_scaling(NI_arr, axis0_values=NI_participants_df.tiv.values, target=1500)
 
-    ########################################################################################################################
-    print("# 2) Raw data")
-    # Univariate stats
+    # imgs_arr = global_scaling(imgs_arr, axis0_values=rois['TIV'].values, target=1500)
+    gscaling = 1500 / NI_participants_df['tiv']
+    Ni_rois_df.loc[:, 'tiv':] = Ni_rois_df.loc[:, 'tiv':].multiply(gscaling, axis="index")
 
-    # design matrix: Set missing diagnosis to 'unknown' to avoid missing data(do it once)
-    dmat_df = NI_participants_df[['age', 'sex', 'tiv']]
-    assert np.all(dmat_df.isnull().sum() == 0)
-    # print("## Do univariate stats on age, sex and TIV")
-    # univmods, univstats = univ_stats(NI_arr.squeeze()[:, mask_arr], formula="age + sex + tiv", data=dmat_df)
 
-    # %time univmods, univstats = univ_stats(NI_arr.squeeze()[:, mask_arr], formula="age + sex + diagnosis + tiv + site", data=dmat_df)
-    # pdf_filename = OUTPUT_CAT12(dataset_name, output_path, scaling=scaling, harmo=harmo, type="univstats", ext="pdf")
-    # plot_univ_stats(univstats, mask_img, data=dmat_df, grand_mean=NI_arr.squeeze()[:, mask_arr].mean(axis=1),
-    #                pdf_filename=pdf_filename, thres_nlpval=3,
-    #               skip_intercept=True)
+    ###########################################################################
+    print("## Save array, rois and participants files")
+    NI_participants_df.to_csv(participants_filename, index=False, sep=sep)
+    Ni_rois_df.to_csv(rois_filename, index=False, sep=sep)
+    np.save(vbm_filename, NI_arr)
 
-    ########################################################################################################################
-    print("# 3) Global scaling")
-    scaling, harmo = 'gs', 'raw'
-
-    print("## Apply global scaling")
-    NI_arr = global_scaling(NI_arr, axis0_values=np.array(NI_participants_df.tiv), target=1500)
-    # Save
-    # RM data64 always in 64
-    # RM harmo no harmonization
-    print("## Save the new .npy array")
-    np.save(OUTPUT_CAT12(dataset, output_path, scaling=scaling, harmo=harmo, type="data64", ext="npy"), NI_arr)
-    NI_arr = np.load(OUTPUT_CAT12(dataset, output_path, scaling=scaling, harmo=harmo, type="data64", ext="npy"), mmap_mode='r')
-
-    # # Univariate stats
-    # print("## Recompute univariate stats on age, sex and TIV")
-    # univmods, univstats = univ_stats(NI_arr.squeeze()[:, mask_arr], formula="age + sex + tiv", data=dmat_df)
-    # pdf_filename = OUTPUT_CAT12(dataset_name, output_path, scaling=scaling, harmo=harmo, type="univstats", ext="pdf")
-    # plot_univ_stats(univstats, mask_img, data=dmat_df, grand_mean=NI_arr.squeeze()[:, mask_arr].mean(axis=1),
-    #                 pdf_filename=pdf_filename, thres_nlpval=3,
-    #                 skip_intercept=True)
-    # Deallocate the memory
-    del NI_arr
+    return participants_filename, rois_filename, vbm_filename
 
 
 def global_scaling(NI_arr, axis0_values=None, target=1500):
@@ -426,6 +370,7 @@ def global_scaling(NI_arr, axis0_values=None, target=1500):
     gscaling = gscaling.reshape([gscaling.shape[0]] + [1] * (NI_arr.ndim - 1))
     return gscaling * NI_arr
 
+
 def load_images(NI_filenames, check=dict()):
     """
     Load images assuming paths contain a BIDS pattern to retrieve participant_id such /sub-<participant_id>/
@@ -444,7 +389,7 @@ def load_images(NI_filenames, check=dict()):
     >>> NI_filenames = ['/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-ICAAR017/ses-V1/mri/mwp1sub-ICAAR017_ses-V1_acq-s03_T1w.nii',
     '/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-ICAAR033/ses-V1/mri/mwp1sub-ICAAR033_ses-V1_acq-s07_T1w.nii',
     '/neurospin/psy/start-icaar-eugei/derivatives/cat12/vbm/sub-STARTRA160489/ses-V1/mri/mwp1sub-STARTRA160489_ses-v1_T1w.nii']
-    >>> NI_arr, NI_participants_df, ref_img = preproc.load_images(NI_filenames, check=dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5)))
+    >>> NI_arr, NI_participants_df, ref_img = load_images(NI_filenames, check=dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5)))
     >>> NI_arr.shape
     (3, 1, 121, 145, 121)
     >>> NI_participants_df
@@ -528,6 +473,30 @@ def get_keys(filename):
     return keys
 
 
+def diff_sets(a, b):
+    """Compare sets
+
+    Parameters
+    ----------
+    a : TYPE
+        DESCRIPTION.
+    b : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    set
+        diff between a and b.
+    set
+        a - b.
+    set
+        b - a.
+    """
+    a = set(a)
+    b = set(b)
+    return (a - b).union(b - a), a - b, b - a
+
+
 def img_to_array(img_filenames, check_same_referential=True, expected=dict()):
     """
     Convert nii images to array (n_subjects, 1, , image_axis0, image_axis1, ...)
@@ -596,3 +565,34 @@ def img_to_array(img_filenames, check_same_referential=True, expected=dict()):
     imgs_arr = np.stack([np.expand_dims(img.get_fdata(), axis=0) for img in imgs_nii])
 
     return imgs_arr, df, ref_img
+
+
+def ml_regression(data, y):
+    """ Basic QC for age predictio
+
+    data : dict of arrays (N, P)
+    y : array (N, )
+    """
+    # sklearn for QC
+    import sklearn.linear_model as lm
+    from sklearn.model_selection import cross_validate
+    from sklearn import preprocessing
+    from sklearn.pipeline import make_pipeline
+    from sklearn.model_selection import KFold
+
+    cv = KFold(n_splits=5, shuffle=True, random_state=0)
+    lr = make_pipeline(preprocessing.StandardScaler(), lm.Ridge(alpha=10))
+
+    res = list() #pd.DataFrame(columns= ["r2", "mae", "rmse"])
+    for name, X, in data.items():
+        cv_res = cross_validate(estimator=lr, X=X, y=y, cv=cv,
+                                n_jobs=5,
+                                scoring=['r2', 'neg_mean_absolute_error',
+                                         'neg_mean_squared_error'])
+        r2 = cv_res['test_r2'].mean()
+        rmse = np.sqrt(np.mean(-cv_res['test_neg_mean_squared_error']))
+        mae = np.mean(-cv_res['test_neg_mean_absolute_error'])
+        res.append([name, r2, mae, rmse])
+        print("%s:\tCV R2:%.4f, MAE:%.4f, RMSE:%.4f" % (name, r2, mae, rmse))
+
+    return pd.DataFrame(res, columns= ["data", "r2", "mae", "rmse"])
