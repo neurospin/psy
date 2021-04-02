@@ -194,7 +194,8 @@ def masklistordered(path_rawdata, root_cat12, list_already_done):
     for root, dirs, files in os.walk(path_rawdata):
         for file in files:
             if re.search("T1w[_]*[a-zA-Z0-9]*.nii", file)\
-               and file not in list_already_done:
+               and file not in list_already_done\
+               and not re.search("err", root):
                 file_keys = get_keys(file)
                 runid = "run-{0}".format(file_keys['run'])
                 if list_avr:

@@ -26,8 +26,12 @@ The obtained quality ratings range from 0.5 (100 rating points (rps)) to 10.5 (0
 
 Default strategy:
 
-1. Discard (`qc` column of `qc.tsv`) participants with <QC metrics to be defined> see larger than 4.5
+1. Discard (`qc` column of `qc.tsv`) participants with <IQR or NCR> see larger than 4.5
 2. Inspect image (`nii_plottings.pdf`) by increasing `corr_mean` and manually discard participants.
+
+Catreport content :
+http://www.neuro.uni-jena.de/cat12-html/cat_methods_catreporthelp.html
+http://www.neuro.uni-jena.de/cat12-html/cat_methods_errormanagement.html
 
 
 [In Finkelmeyer et al. 2018](https://www.sciencedirect.com/science/article/pii/S221315821730236X):

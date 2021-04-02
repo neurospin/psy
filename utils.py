@@ -70,7 +70,7 @@ def OUTPUT_QUASI_RAW(dataset, output_path, modality='cat12vbm', mri_preproc='qua
                  ("" if type is None else "_" + type) + "." + ext)
 
 def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participant_id="participant_id", id_type=str,
-                merge_ni_path=True):
+                merge_ni_path=True, tiv_columns=[], participants_columns=[]):
     """
     Select participants of NI_arr and NI_participants_df participants that are also in participants_df
 
@@ -163,6 +163,13 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
             # New code simply select qc['qc'] == 1
             keep = qc[qc['qc'] == 1][unique_key_qc]
             init_len = len(NI_participants_merged)
+            
+            keep.participant_id = keep.participant_id.astype(str)
+
+            assert NI_participants_merged.participant_id.dtype==keep.participant_id.dtype
+            assert NI_participants_merged.session.dtype==keep.session.dtype
+            assert NI_participants_merged.run.dtype==keep.run.dtype
+
             # Very important to have 1:1 correspondance between the QC and the NI_participant_array
             NI_participants_merged = pd.merge(NI_participants_merged, keep, on=unique_key_qc,
                                               how='inner', validate='1:1')
@@ -193,8 +200,12 @@ def merge_ni_df(NI_arr, NI_participants_df, participants_df, qc=None, participan
                                            unique_key)
 
     # split rois and participants
-    NI_participants = NI_participants_merged[['participant_id', 'ni_path', 'session', 'run', 'age', 'sex', 'site', 'study', 'diagnosis', 'tiv']]
-    NI_rois = NI_participants_merged.drop(['age', 'sex', 'site', 'study', 'diagnosis'], axis=1)
+    NI_participants = NI_participants_merged.drop(list(tiv_columns), axis=1)
+    NI_participants = NI_participants.drop("index", axis=1)
+    NI_participants["tiv"] = NI_participants_merged["tiv"]
+    NI_rois = NI_participants_merged.drop(list(participants_columns), axis=1)
+    NI_rois = NI_rois.drop("index", axis=1)
+    
 
     # Get back to NI_arr using the indexes kept in NI_participants through all merges
     idx_to_keep = NI_participants_merged['index'].values
@@ -269,7 +280,8 @@ def quasi_raw_nii2npy(nii_path, phenotype, dataset_name, output_path, qc=None, s
     del NI_arr
 
 def cat12_nii2npy(nii_path, phenotype, dataset, output_path, qc=None, sep='\t', id_type=str,
-            check = dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5))):
+            check = dict(shape=(121, 145, 121), zooms=(1.5, 1.5, 1.5)),
+            tiv_columns=[], participants_columns=[]):
 
     # Save 3 files:
     participants_filename = OUTPUT_CAT12(dataset, output_path, mri_preproc='participants', ext='tsv')
@@ -311,7 +323,9 @@ def cat12_nii2npy(nii_path, phenotype, dataset, output_path, qc=None, sep='\t', 
     # Merge nii's participant_id with participants.tsv
 
     NI_arr, NI_participants_df, Ni_rois_df = merge_ni_df(NI_arr, NI_participants_df, participants_df,
-                                                         qc=qc, id_type=id_type)
+                                                         qc=qc, id_type=id_type,
+                                                         tiv_columns=tiv_columns,
+                                                         participants_columns=participants_columns)
     print('--> Remaining samples: {} / {}'.format(len(NI_participants_df), len(participants_df)))
     print('--> Remaining samples: {} / {}'.format(len(Ni_rois_df), len(participants_df)))
     assert NI_arr.shape[0] == NI_participants_df.shape[0] == Ni_rois_df.shape[0], "Unexpected nb of participants"
@@ -545,7 +559,6 @@ def img_to_array(img_filenames, check_same_referential=True, expected=dict()):
     """
 
     df = pd.DataFrame([pd.Series(get_keys(filename)) for filename in img_filenames])
-
     imgs_nii = [nibabel.load(filename) for filename in df.ni_path]
 
     ref_img = imgs_nii[0]
@@ -584,7 +597,7 @@ def ml_regression(data, y):
     lr = make_pipeline(preprocessing.StandardScaler(), lm.Ridge(alpha=10))
 
     res = list() #pd.DataFrame(columns= ["r2", "mae", "rmse"])
-    for name, X, in data.items():
+    for name, X, in sorted(data.items()):
         cv_res = cross_validate(estimator=lr, X=X, y=y, cv=cv,
                                 n_jobs=5,
                                 scoring=['r2', 'neg_mean_absolute_error',
@@ -596,3 +609,39 @@ def ml_regression(data, y):
         print("%s:\tCV R2:%.4f, MAE:%.4f, RMSE:%.4f" % (name, r2, mae, rmse))
 
     return pd.DataFrame(res, columns= ["data", "r2", "mae", "rmse"])
+
+
+def ml_correlation_plot(data, y, output, study):
+    # to understand why bas R2
+    # sklearn for QC
+    import sklearn.linear_model as lm
+    from sklearn.model_selection import cross_val_predict
+    from sklearn import preprocessing
+    from sklearn.pipeline import make_pipeline
+    from sklearn.model_selection import KFold
+    import matplotlib.pyplot as plt
+    matplotlib.use( 'tkagg' )
+
+    cv = KFold(n_splits=5, shuffle=True, random_state=0)
+    lr = make_pipeline(preprocessing.StandardScaler(), lm.Ridge(alpha=10))
+
+    for name, X, in data.items():
+        predicted = cross_val_predict(lr, X, y, cv=cv)
+        fig, ax = plt.subplots()
+        ax.scatter(y, predicted, edgecolors=(0, 0, 0))
+        ax.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=4)
+        ax.set_xlabel('Measured (Age)')
+        ax.set_ylabel('Predicted (Brain Age)')
+        plt.title(name)
+        plt.savefig(os.path.join(output, "{0}_{1}_corr_plot".format(study, name)))
+        # plt.show()
+
+
+def df_column_switch(df, column1, column2):
+    i = list(df.columns)
+    a, b = i.index(column1), i.index(column2)
+    i[b], i[a] = i[a], i[b]
+    df = df[i]
+    return df
+    
+

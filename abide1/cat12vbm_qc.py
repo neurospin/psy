@@ -1,7 +1,6 @@
 """
-Make LOCALIZER cat12vbm QC
+Make ABIDE1 cat12vbm QC
 """
-
 import sys
 sys.path.append("/neurospin/psy_sbox/git/ns-datasets")
 import pandas as pd
@@ -11,7 +10,7 @@ import nibabel
 from cat12vbm_qc_utils import parse_xml_files_scoresQC
 from cat12vbm_qc_utils import plot_pca, compute_mean_correlation,\
                                 pdf_plottings, pdf_cat, mwp1toreport,\
-                                concat_tsv
+                                concat_tsv, pdf_cat2
 from cat12vbm_qc_utils import img_to_array
 from cat12vbm_qc_utils import compute_brain_mask
 
@@ -60,7 +59,7 @@ def launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, inputscores):
     # cat12vbm reports pdf ordored by mean correlation
     reportpdf = os.path.join(root_qc, 'cat12_reports.pdf')
     nii_filenames_pdf = mwp1toreport(nii_filenames_sorted, root_cat12vbm)
-    pdf_cat(nii_filenames_pdf, reportpdf)
+    pdf_cat2(nii_filenames_pdf, reportpdf, 300)
 
     return 0
 
@@ -69,7 +68,9 @@ def apply_qc_limit_criteria(study_path, root_cat12vbm):
     if not os.path.exists(root_qc):
         root_psy_sbox = root_cat12vbm.replace("/psy/", "/psy_sbox/")
         root_qc = root_psy_sbox+"_qc"
-    participants = pd.read_csv(os.path.join(study_path, "participants.tsv"), sep='\t')
+    participants = pd.read_csv(os.path.join(study_path, "Phenotypic_V1_0b.csv"), sep=',')
+    participants = participants.rename(columns={"AGE_AT_SCAN": 'age', 'SEX': 'sex', 'SITE_ID': 'site',
+                                                  "DX_GROUP": "diagnosis", "SUB_ID": 'participant_id'})
     participants.participant_id = participants.participant_id.astype(str)
 
     qc = pd.read_csv(os.path.join(root_qc, 'qc.tsv'), sep= "\t")
@@ -90,7 +91,7 @@ def apply_qc_limit_criteria(study_path, root_cat12vbm):
 
     for index, row in nocat12.iterrows():
         sub = row['participant_id']
-        err = "sub-{0}/ses-V1/anat/err".format(sub)
+        err = "sub-{0}/ses-1/anat/err".format(sub)
         path_err = os.path.join(root_cat12vbm, err)
         if os.path.exists(path_err):
             err_name = os.listdir(path_err)[0]
@@ -122,11 +123,11 @@ def main():
     study_path = root_cat12vbm.split(os.sep)[0:-2]
     study_path = os.sep.join(study_path)
 
-    launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, input_qcscores)
+    # launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, input_qcscores)
     apply_qc_limit_criteria(study_path, root_cat12vbm)
 
     # COMMAND Terminal
-    # python3 /neurospin/psy_sbox/git/ns-datasets/localizer/cat12vbm_qc.py --input /neurospin/psy/localizer/derivatives/cat12-12.6_vbm/sub-*/ses-*/anat/mri/mwp1sub[-_0-9a-zA-Z]*_T1w.nii --input_qcscores /neurospin/psy/localizer/derivatives/cat12-12.6_vbm/sub-*/ses-*/anat/report/cat_sub-*_T1w.xml --root_cat12vbm /neurospin/psy/localizer/derivatives/cat12-12.6_vbm
+    # python3 /neurospin/psy_sbox/git/ns-datasets/abide1/cat12vbm_qc.py --input /neurospin/psy_sbox/abide1/derivatives/cat12-12.6_vbm/sub-*/ses-*/anat/mri/mwp1sub[-_0-9a-zA-Z]*_T1w.nii --input_qcscores /neurospin/psy_sbox/abide1/derivatives/cat12-12.6_vbm/sub-*/ses-*/anat/report/cat_sub-*_T1w.xml --root_cat12vbm /neurospin/psy_sbox/abide1/derivatives/cat12-12.6_vbm
 
 if __name__ == "__main__":
     main()

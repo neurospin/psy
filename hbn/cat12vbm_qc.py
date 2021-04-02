@@ -54,7 +54,7 @@ def launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, inputscores, r
     reportpdf = os.path.join(root_qc, 'cat12_reports.pdf')
     nii_filenames_pdf = mwp1toreport(nii_filenames_sorted, root_cat12vbm)
     #pdf_cat2(nii_filenames_pdf, reportpdf,1000)
-    pdf_cat(nii_filenames_pdf, reportpdf)
+    pdf_cat2(nii_filenames_pdf, reportpdf, 300)
 
     return 0
 
