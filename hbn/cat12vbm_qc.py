@@ -86,7 +86,7 @@ def cat12err(study_path, root_cat12vbm, root_qc):
     nocat12_filename = os.path.join(root_qc, 'cat12error_participants.tsv')
     nocat12 = participants.participant_id[~participants.participant_id.isin(qc.participant_id)]
     nocat12 = pd.DataFrame(nocat12, columns=['participant_id', 'err', "path"])
-    err_path = glob.glob("/neurospin/cati/ADNI/adni/BIDS/sub-*/ses-*/anat/err")
+    err_path = glob.glob(os.path.join(root_cat12vbm, "/sub-*/ses-*/anat/err"))
     err_sub = []
     for i in err_path:
         name = get_keys(i)
@@ -136,8 +136,8 @@ def main():
     root_qc = options.root_qc[0] 
     study_path = "/neurospin/psy/hbn"
 
-    launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, input_qcscores,root_qc)
-    apply_qc_limit_criteria(root_cat12vbm, root_qc)
+    # launch_cat12_qc(img_filenames, mask_filenames, root_cat12vbm, input_qcscores,root_qc)
+    # apply_qc_limit_criteria(root_cat12vbm, root_qc)
     cat12err(study_path, root_cat12vbm, root_qc)
 
 

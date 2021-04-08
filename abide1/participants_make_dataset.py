@@ -1,6 +1,6 @@
 """
-Make ABIDE1 phenotype
-Read participants, phenotypes merge with TIV and save to phenotype
+Make ABIDE1 participants
+Read phenotypes select, save to participants
 """
 
 import os
